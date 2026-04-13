@@ -4,7 +4,7 @@ from core.environment import MapEnvironment
 from core.sensor import LidarA1
 
 def generate_circle_path(center=(10, 10), radius=5, num_steps=40):
-    theta = linspace(0, 2*np.pi, num_steps)
+    theta = np.linspace(0, 2*np.pi, num_steps)
     path = []
     for t in theta:
         x = center[0] + radius * np.cos(t)
