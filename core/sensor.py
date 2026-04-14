@@ -1,34 +1,70 @@
 import numpy as np
 
 class LidarA1:
-    def __init__(self, range_max=12.0, noise=0.05):
+    def __init__(self):
         self.range_min = 0.15
-        self.range_max = range_max
-        self.angle_res = np.deg2rad(1.0) # 1度分辨率
-        self.noise_std = noise          # 测距噪声
+        self.range_max = 12.0
+        self.angle_res = np.deg2rad(0.5) 
+
+    def _get_noise_std(self, distance):
+        # 兼容数组输入的噪声计算
+        if isinstance(distance, np.ndarray):
+            noise_scales = np.where(distance <= 3.0, 0.01, 
+                           np.where(distance <= 5.0, 0.02, 0.025))
+            return distance * noise_scales
+        # 兼容单个数值
+        std = 0.01 if distance <= 3.0 else (0.02 if distance <= 5.0 else 0.025)
+        return distance * std
 
     def scan(self, robot_pose, env):
-        """
-        robot_pose: [x, y, theta]
-        env: MapEnvironment 对象
-        """
-        angles = np.arange(-np.pi, np.pi, self.angle_res)
-        ranges = []
         rx, ry, rtheta = robot_pose
+        angles = np.arange(-np.pi, np.pi, self.angle_res)
+        num_beams = len(angles)
+        
+        final_ranges = np.full(num_beams, self.range_max, dtype=np.float32)
+        finished = np.zeros(num_beams, dtype=bool)
 
-        for angle in angles:
-            beam_angle = angle + rtheta
-            hit_dist = self.range_max
+        # 1. 预计算所有射线的方向向量
+        beam_angles = angles + rtheta
+        cos_a = np.cos(beam_angles)
+        sin_a = np.sin(beam_angles)
+
+        # 2. 射线步进
+        # 步长建议设为固定值，比如 0.05m (5cm)，兼顾速度与精度
+        step = 0.05 
+        dist_steps = np.arange(self.range_min, self.range_max, step)
+
+        for d in dist_steps:
+            active = ~finished
+            if not np.any(active): break
+
+            # 计算所有活跃射线的物理坐标 (x, y)
+            tx_m = rx + d * cos_a[active]
+            ty_m = ry + d * sin_a[active]
+
+            # 转换为像素坐标
+            px = (tx_m * env.res).astype(np.int32)
+            py = (ty_m * env.res).astype(np.int32)
+
+            # 越界检查
+            in_bounds = (px >= 0) & (px < env.size_px) & (py >= 0) & (py < env.size_px)
             
-            # 射线步进探测 (模拟激光传播)
-            step = 1.0 / env.res
-            for d in np.arange(self.range_min, self.range_max, step):
-                tx = rx + d * np.cos(beam_angle)
-                ty = ry + d * np.sin(beam_angle)
+            if not np.any(in_bounds): continue
+
+            # 只检查在地图内的射线
+            # 注意：NumPy 矩阵索引是 [行, 列]，即 [y, x]
+            # 如果之前的 MapEnvironment 绘图是正常的，这里必须对齐
+            hit_mask = np.zeros(len(tx_m), dtype=bool)
+            hit_mask[in_bounds] = env.grid_map[py[in_bounds], px[in_bounds]] > 0
+            
+            if np.any(hit_mask):
+                # 找到这些击中点在原 angles 数组中的索引
+                active_indices = np.where(active)[0]
+                hit_indices = active_indices[hit_mask]
                 
-                if env.is_occupied(tx, ty):
-                    hit_dist = d + np.random.normal(0, self.noise_std)
-                    break
-            ranges.append(hit_dist)
-            
-        return np.array(ranges), angles
+                # 记录距离并加上噪声
+                noise = np.random.normal(0, self._get_noise_std(d), size=len(hit_indices))
+                final_ranges[hit_indices] = d + noise
+                finished[hit_indices] = True
+
+        return final_ranges, angles
