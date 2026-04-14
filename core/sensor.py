@@ -1,13 +1,26 @@
 import numpy as np
 
+
 class LidarA1:
     def __init__(self):
-        self.range_min = 0.15
-        self.range_max = 12.0
-        self.angle_res = np.deg2rad(0.5) 
+        self.range_min = 0.15                   # 最小测距 15cm
+        self.range_max = 12.0                   # 最大测距 12m
+        self.angle_res = np.deg2rad(0.5)        # 角分辨率 0.5度，360度共720条射线
+        
+        # 新增频率控制参数
+        self.scan_period = 1.0 / 5.5            # 5.5Hz，约 0.1818s 更新一次数据
+        self.last_update_time = -self.scan_period
 
-    def _get_noise_std(self, distance):
-        # 兼容数组输入的噪声计算
+    def ready(self, current_sim_time):
+        """判断是否到达 5.5Hz 的采样时刻"""
+        if current_sim_time - self.last_update_time >= self.scan_period:
+            self.last_update_time = current_sim_time
+            return True
+        return False
+    
+
+
+    def _get_noise_std(self, distance):                         # 测距精度
         if isinstance(distance, np.ndarray):
             noise_scales = np.where(distance <= 3.0, 0.01, 
                            np.where(distance <= 5.0, 0.02, 0.025))
@@ -18,7 +31,7 @@ class LidarA1:
 
     def scan(self, robot_pose, env):
         rx, ry, rtheta = robot_pose
-        angles = np.arange(-np.pi, np.pi, self.angle_res)
+        angles = np.arange(-np.pi, np.pi, self.angle_res)       # 扫描范围 -180° 到 180°
         num_beams = len(angles)
         
         final_ranges = np.full(num_beams, self.range_max, dtype=np.float32)
