@@ -1,0 +1,13 @@
+# 显著性模式增量配置
+saliency:
+  alpha: 0.5        # 几何权重
+  beta: 0.3         # 强度权重
+  gamma: 0.2        # 语义权重
+  curvature_k: 5    # KNN 近邻数
+  use_intensity: false
+weighted_icp:
+  a: 200.0
+  b: 55.0
+dynamic_filter:
+  th_pose_translation: 0.05   # m
+  th_pose_rotation: 0.02    # rad (~1.15°)

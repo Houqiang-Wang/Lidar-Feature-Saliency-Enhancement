@@ -1,0 +1,19 @@
+# 原始模式配置
+map_size: [20, 20]
+resolution: 0.05
+sensor:
+  range_max: 12.0
+  angle_res: 1.0
+  noise_sigma: 0.02
+  range_min: 0.15
+icp:
+  max_iter: 50
+  tolerance: 1e-5
+  min_match_dist: 0.5
+trajectory:
+  radius: 5.0
+  speed: 0.1
+  steps: 360
+visualization:
+  show_live: true
+  save_gif: false

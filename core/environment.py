@@ -41,3 +41,26 @@ class MapEnvironment:
         if 0 <= px < self.size_px and 0 <= py < self.size_px:
             return self.grid_map[py, px] > 0
         return True
+    
+
+    def get_semantic_labels(self, points: np.ndarray) -> np.ndarray:
+        """
+        查询给定坐标点的语义标签。
+        
+        Args:
+            points: (N, 2) 世界坐标
+        
+        Returns:
+            (N,) 字符串数组，如 'wall', 'weed', 'dynamic', 'static'
+        """
+        labels = []
+        for p in points:
+            # 根据你的栅格地图图层判断
+            # 示例逻辑：
+            if self.is_wall(p):
+                labels.append('wall')
+            elif self.is_weed(p):
+                labels.append('weed')
+            else:
+                labels.append('unknown')
+        return np.array(labels)

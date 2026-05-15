@@ -1,0 +1,26 @@
+from pathlib import Path
+import fitz
+
+# 获取 docs 文件夹路径
+docs_dir = Path(__file__).parent
+
+# 自动找 docs 里的第一个 PDF 文件
+pdf_files = list(docs_dir.glob("*.pdf"))
+if not pdf_files:
+    raise FileNotFoundError(f"docs 文件夹里没有 PDF 文件！当前路径: {docs_dir.absolute()}")
+    
+pdf_path = pdf_files[0]
+print(f"找到 PDF: {pdf_path.name}")
+
+doc = fitz.open(str(pdf_path))
+text = ""
+for page in doc:
+    text += page.get_text()
+
+# 输出到同目录
+output = docs_dir / "saliency_loam_raw.txt"
+with open(output, "w", encoding="utf-8") as f:
+    f.write(text)
+
+print(f"已提取到: {output}")
+print(f"总字符数: {len(text)}")

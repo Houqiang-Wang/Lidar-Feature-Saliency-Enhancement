@@ -1,0 +1,1030 @@
+IEEE TRANSACTIONS ON INSTRUMENTATION AND MEASUREMENT, VOL. 75, 2026
+8500309
+Saliency-LOAM: Saliency-Based LiDAR
+Odometry and Mapping
+Ke Wang , Member, IEEE, Kai Chen , Juwei Guo , and Jianbo Lu , Fellow, IEEE
+Abstract—Simultaneous localization and mapping (SLAM) is
+a critical research topic in autonomous driving, robotics, and
+related ﬁelds. Although LiDAR-based SLAM methods achieve
+excellent performance, they primarily extract feature points
+from the geometric structure of point clouds, failing to mitigate
+the adverse eﬀects of noise interference on feature matching,
+which leads to inaccurate localization in complex environments.
+In this article, we present Saliency-LOAM, a novel LiDAR
+odometry method based on point cloud saliency. The framework
+proposes Saliency-Net, a feature extraction network that inte-
+grates geometric, intensity, and semantic information of point
+clouds to eﬀectively predict the saliency information of diﬀerent
+regions in 3-D scenes. It assigns higher saliency weights to
+regions with greater feature stability. During the feature matching
+process, saliency weights are utilized to adjust the distance
+residual term, ensuring that the optimization equation focuses
+on more stable and higher-quality point cloud regions, thereby
+iteratively optimizing to achieve more accurate pose estimation.
+Experimental results on public datasets and real-world scenarios
+show that, compared to existing methods, the point cloud saliency
+mechanism better suppresses the negative impact of noise in raw
+point cloud data on point cloud matching, signiﬁcantly improving
+the robustness and accuracy of LiDAR SLAM systems. Our
+code will be open-sourced at https://github.com/ck-png/Saliency-
+LOAM
+Index Terms—LiDAR odometry, point cloud saliency, simulta-
+neous localization and mapping (SLAM).
+I. INTRODUCTION
+I
+N THE ﬁeld of autonomous driving, precise environ-
+mental perception and reliable real-time localization are
+crucial for achieving advanced autonomous driving systems.
+Currently, simultaneous localization and mapping (SLAM)
+has become an indispensable key technology due to its
+unique advantages. Given the diﬀerences in sensor types,
+Received 2 July 2025; revised 14 October 2025; accepted 26 October 2025.
+Date of publication 11 December 2025; date of current version 8 January 2026.
+This work was supported in part by the National Natural Science Foundation
+of China under Grant 52372408 and in part by the Open Fund of State Key
+Laboratory of Intelligent Vehicle Safety Technology. The Associate Editor
+coordinating the review process was Dr. Jing Yuan. (Corresponding author:
+Ke Wang.)
+Ke Wang is with the State Key Laboratory of Intelligent Vehicle Safety
+Technology, Chongqing Changan Automobile Company Ltd., Chongqing
+400020, China, and also with the College of Mechanical and Vehicle
+Engineering, Chongqing University, Chongqing 400044, China (e-mail:
+kewang@cqu.edu.cn).
+Kai Chen and Juwei Guo are with the College of Mechanical and Vehi-
+cle Engineering, Chongqing University, Chongqing 400044, China (e-mail:
+chenkai@stu.cqu.edu.cn; guojuwei@stu.cqu.edu.cn).
+Jianbo Lu is with the Department of Vehicle Engineering, Geely Automo-
+bile Research Institute, Ningbo 315336, China (e-mail: jianbo.lu@ieee.org).
+Digital Object Identiﬁer 10.1109/TIM.2025.3643077
+LiDAR-based SLAM oﬀers signiﬁcant advantages over visual
+SLAM [1], [2]. Regardless of lighting or weather conditions,
+LiDAR sensors provide consistent and accurate data. Existing
+LiDAR SLAM methods [3], [4], [5], [6] primarily rely on
+geometric features of point clouds to estimate pose and
+construct maps. Researchers explore additional point cloud
+information, including intensity and semantic information, to
+assist in extracting more stable features and enhance the
+performance of SLAM systems.
+Saliency, initially popularized in visual tasks, is a mecha-
+nism that emulates human visual attention, whereby humans
+focus on prominent objects and automatically assign higher
+weights to such targets when performing self-localization
+through visual perception. For instance, when navigating
+unknown environments, humans tend to focus on distinctive
+landmarks such as buildings or signs to determine their posi-
+tion, as these objects exhibit prominent and stable features. In
+the ﬁeld of visual SLAM, our prior work SBAS [7] computes
+saliency maps by incorporating geometric and semantic infor-
+mation from images, ultimately enhancing the performance
+of visual odometry. In LiDAR-based SLAM, studies [8],
+[9] integrate geometric and intensity information of point
+clouds and design distinct weighting functions for line and
+plane feature points, eﬀectively suppressing uncertainties in
+feature matching introduced by noisy point clouds. However,
+relying solely on geometric and intensity information limits
+a comprehensive understanding of the environment. Semantic
+information provides richer feature representations, oﬀering
+the potential to improve localization accuracy and enable more
+intelligent functionalities for downstream planning tasks [10].
+Therefore, we propose Saliency-LOAM, which, in addition to
+geometric information, further integrates intensity and seman-
+tic information of point clouds. The detailed analysis is as
+follows.
+Geometric information enables the initial extraction of line
+and plane features in the environment, although it still includes
+noise. Intensity information reﬂects the material properties
+and light reﬂectance capabilities of diﬀerent objects, with
+distinct objects exhibiting strong gradient changes at edges.
+These changes are stable, facilitating the identiﬁcation of more
+reliable line and plane features and ﬁltering out extraneous
+noise. Furthermore, the semantic information of point clouds
+provides high-level environmental understanding, allowing
+focus on objects such as vehicles, trees, and utility poles,
+which possess more stable geometric structures compared to
+other point clouds. This addresses the limitation of traditional
+1557-9662 © 2025 IEEE. All rights reserved, including rights for text and data mining, and training of artiﬁcial intelligence and
+similar technologies. Personal use is permitted, but republication/redistribution requires IEEE permission.
+See https://www.ieee.org/publications/rights/index.html for more information.
+Authorized licensed use limited to: FUDAN UNIVERSITY. Downloaded on May 14,2026 at 05:48:56 UTC from IEEE Xplore.  Restrictions apply. 
+8500309
+IEEE TRANSACTIONS ON INSTRUMENTATION AND MEASUREMENT, VOL. 75, 2026
+Fig. 1.
+Saliency-net module (the part with orange and purple) takes the projected 2-D images as input and generates the saliency point cloud through
+back-projection. The feature extraction module extracts line features and plane features. Based on the saliency values provided by the saliency point cloud,
+the saliency feature matching module minimizes the distance between line feature points and lines, as well as the distance between plane feature points and
+planes through iterative optimization, which emphasizes the optimization of more salient and critical features. Finally, the pose estimation module performs
+pose estimation based on the matching results.
+line and plane features, which fail to leverage advanced
+geometric structures in the environment. To this end, we
+propose Saliency-Net, which eﬀectively integrates these three
+types of information to compute saliency information. This
+approach not only extracts more stable line and plane features
+but also assigns higher weights to them during feature match-
+ing, thereby enhancing the accuracy and robustness of LiDAR
+SLAM systems.
+This article proposes Saliency-LOAM, a LiDAR-based
+SLAM method that introduces the concept of saliency to the
+ﬁeld of LiDAR odometry for the ﬁrst time, enabling accurate,
+robust, and real-time localization and mapping. Speciﬁcally,
+our contributions are as follows.
+1) We propose Saliency-Net, a neural network designed to
+predict point cloud saliency, integrating geometric infor-
+mation, intensity information, and semantic information
+from LiDAR point clouds. To better guide network
+training, we create a dataset with saliency ground truth
+based on these information types. Through supervised
+training, Saliency-Net eﬀectively predicts point cloud
+saliency in autonomous driving scenarios.
+2) Based on Saliency-Net, we propose Saliency-LOAM,
+a LiDAR SLAM method incorporating the point cloud
+saliency mechanism. In the feature matching stage, the
+algorithm utilizes predicted saliency weights to constrain
+distance residual calculations, enabling it to focus on
+feature-stable point cloud regions, thereby enhancing the
+robustness and accuracy of point cloud feature matching
+and pose estimation.
+3) Experimental results on open-source datasets demon-
+strate the eﬀectiveness of the point cloud saliency
+mechanism, with our method outperforming state-of-
+the-art approaches in pose estimation performance and
+mapping quality. To validate practical applicability, we
+conduct real-vehicle comparison tests based on a campus
+environment. Our method achieves superior performance
+across numerous challenging scenarios.
+II. METHOD
+As shown in Fig. 1, the proposed Saliency-LOAM consists
+of four main modules: feature extraction, point cloud saliency
+prediction, saliency feature matching, and pose estimation.
+A. Design of Saliency Weights
+Geometric information includes distance information and
+local curvature. For a point Pi(xi, yi, zi, Ii), where xi, yi, and
+zi are the 3-D coordinates and Ii is the intensity value,
+distance information is obtained using the following formula,
+which reﬂects the spatial structure and geometric shape of the
+3-D point cloud, facilitating the acquisition of local curvature.
+This also ensures alignment between saliency information and
+the original point cloud, while supporting the extraction of
+semantic information
+ri =
+q
+x2
+i + y2
+i + z2
+i .
+(1)
+For local curvature, we utilize a local smoothness measure,
+denoted as ci, to represent the local curvature. Taking n points
+adjacent to the current point i to form a point set N, setting
+rj as the distance information of the jth point, then the local
+smoothness ci of the current point i is calculated as follows:
+ci =
+1
+2n · ∥ri∥2
+2
+
+X
+j∈s,j,i
+ r j −ri
+
+
+2
+2
+.
+(2)
+Speciﬁcally, during the ﬁltering process, thresholds THline
+and THplane need to be set for line and plane features, respec-
+tively. Points with local curvature ci ≥THline are selected
+Authorized licensed use limited to: FUDAN UNIVERSITY. Downloaded on May 14,2026 at 05:48:56 UTC from IEEE Xplore.  Restrictions apply. 
+WANG et al.: SALIENCY-LOAM: SALIENCY-BASED LiDAR ODOMETRY AND MAPPING
+8500309
+Fig. 2. Cylindrical projection of point cloud. (a) Point cloud cylindrical graph.
+(b) Point cloud 3-D coordinate system.
+as line feature points, while those with ci ≤THplane are
+considered plane feature points.
+For intensity information, we use K-nearest neighbors
+(KNN) to identify the neighborhood Ni of point Pi. Taking the
+x-direction as an example, the intensity gradient is computed
+as follows:
+∂I
+∂x =
+X
+pj∈Ni
+wij ·
+ Ii −Ij
+
+·
+x j −xi
+p j −pi
+
+(3)
+where wij is the Gaussian weight, accounting for the contri-
+bution of spatial distance to the gradient, deﬁned as
+wij = exp
+ 
+−
+pj −pi
+2
+2σ2
+!
+(4)
+where pj is a neighboring point, Ij is the intensity value of
+point p j, and xj is the coordinate of pj. The above computation
+yields the gradient vector as follows:
+∇Ii =
+ ∂I
+∂x, ∂I
+∂y, ∂I
+∂z
+
+.
+(5)
+Subsequently, the magnitude of the intensity gradient is
+obtained as
+∥∇Ii∥=
+s ∂I
+∂x
+2
++
+∂I
+∂y
+2
++
+∂I
+∂z
+2
+.
+(6)
+By setting an appropriate threshold, more stable point cloud
+regions are selected for subsequent processing.
+The Semantic KITTI dataset [11] provides comprehensive
+semantic labels. Since point clouds belonging to semantic
+categories exhibit greater feature stability than nonsemantic
+point clouds, while dynamically semantic point clouds tend
+to suppress feature matching, we assign the semantic weight
+Msem a uniform weight of 1 to statically semantic point clouds,
+dynamically semantic point clouds and nonsemantic point
+clouds are assigned a weight of 0.
+As shown in Fig. 2, the number of lasers is the image height
+H, and the top and bottom pitch angles are FUp and FDown,
+the ﬁeld of view of LiDAR can be obtained as F = FUp −
+FDown, and the width of the image W is the number of times
+the laser scans a week. We obtain the distance map, local
+curvature map, semantic map, and intensity map of the point
+cloud according to the following formula:
+ u
+v
+
+=
+2
+64
+1
+2
+h
+1 + arctan
+
+yp
+xp
+
+π−1i
+W
+
+1 −
+
+zp
+√
+x2p+y2p+z2p −FDown
+
+F−1
+
+H
+3
+75 .
+(7)
+Fig. 3. Projection maps of various point cloud information. (a) Distance map.
+(b) Local curvature map. (c) Semantic map. (d) Intensity map. (e) Saliency
+map.
+Then, image pyramids are computed separately for distance
+and intensity images. Gaussian ﬁltering is then applied to the
+images of diﬀerent sizes. Subsequently, ITTI [12] saliency
+computation is performed on both the ﬁltered and preﬁltered
+images to obtain distance feature maps Ds and intensity feature
+maps Is for the point cloud.
+The projected data points within a cell (u, v) are deﬁned as
+a set. For the intensity feature map Is, the average intensity
+gradient variation Iavg(u, v) within each cell is computed as the
+conﬁdence weight. For the distance map Ds, the local distance
+variance Varr(u, v) within each cell is calculated, as dense
+regions often exhibit distinctive features. An exponentially
+decaying distance weighting scheme is also incorporated to
+impose a constraint, since points closer to the sensor are
+generally more important; the two factors are combined to
+form the conﬁdence measure. For the local curvature, the
+average curvature within each cell is directly computed as
+Cavg(u, v). The three types of information are individually
+normalized and then weighted, and ﬁnally summed with the
+semantic weight Msem(u, v), which is 1 or 0. Thus, the saliency
+weight S (u, v) for cell (u, v) is given by
+S (u, v) = Norm
+ Norm
+ Iavg (u, v) · Is (u, v)
+
++ Norm (wd (u, v) · Ds (u, v))
++ Norm
+ Cavg (u, v)
+
++ Msem (u, v)
+
+(8)
+wd (u, v) = exp
+
+−Varr (u, v)
+σ2v
+−µr (u, v)2
+2σ2
+d
+
+(9)
+where Varr(u, v) is the local distance variance, µr(u, v) is the
+mean distance, and σ2
+v, σ2
+d are scaling parameters.
+Norm
+refers
+to
+the
+standard
+Min-Max
+normalization
+method, which linearly maps diﬀerent features to a uniﬁed
+interval [0, 1]. For a given input set, where x is the current
+value, max(x) is the maximum value, and min(x) is the
+minimum value, the normalization is deﬁned as follows:
+Norm (x) =
+x −min (x)
+max (x) −min (x).
+(10)
+Since feature data of diﬀerent types exhibit varying
+orders of magnitude, single-layer normalization may signiﬁ-
+cantly weaken features with smaller scales. In contrast, our
+two-layer normalization approach eliminates biases caused by
+diﬀerences in physical dimensions and numerical ranges. In
+summary, we utilize multiple types of point cloud information
+to identify salient point clouds, followed by weighted fusion to
+Authorized licensed use limited to: FUDAN UNIVERSITY. Downloaded on May 14,2026 at 05:48:56 UTC from IEEE Xplore.  Restrictions apply. 
+8500309
+IEEE TRANSACTIONS ON INSTRUMENTATION AND MEASUREMENT, VOL. 75, 2026
+Fig. 4. Saliency-net: point cloud saliency prediction framework. (a) The overall framework of Saliency-Net. (b) The initial saliency prediction module. (c)
+The semantic segmentation module.
+obtain the saliency ground-truth image, which ensures the reli-
+ability of the calculated saliency ground truth, as exempliﬁed
+in Fig. 3.
+B. Point Cloud Saliency Prediction
+Fig.
+4
+illustrates
+the
+Saliency-Net
+for
+point
+cloud
+saliency prediction, which comprises two primary components.
+Fig. 4(a) is the overall network framework, which can be
+composed of two parts: Fig. 4(b) and (c). Fig. 4(b) is the initial
+point cloud saliency prediction network. We refer to U-Net
+[13] using the hourglass encoder and decoder architecture; the
+encoder is used to obtain the context information of the point
+cloud picture, while the corresponding decoder can accurately
+locate the saliency signiﬁcance area of the point cloud. In
+addition, we also use residual modules, which have better
+performance than regular convolutional layers. Each residual
+module is deﬁned as 2×(CONV + BN + ReLU). Furthermore,
+the projection image of the LiDAR point cloud is elongated in
+shape. To avoid losing height information, the downsampling
+module reduces the dimensions only in the width direction
+with a stride of 2. The upsampling module uses transposed
+convolutions with a stride of 2 and combines each upsampled
+feature map with the corresponding feature map from the
+encoder to leverage richer feature information at each stage.
+Fig. 4(c) represents a semantic segmentation network,
+whose primary function is to output semantic information of
+the point cloud. The input of the part (blue horizontal line part
+in the ﬁgure) comes from the feature graph extracted by the
+network encoder in the ﬁrst part, while the decoder part adopts
+the FID and the classiﬁcation head proposed in FIDNet [14].
+In the classiﬁcation head network, we use dilated convolutions
+to extract local features and aggregate them by concatenating
+with the original feature tensor. Finally, a classiﬁcation layer
+is used to predict semantic labels.
+Finally, the outputs of b and c are concatenated along the
+channel dimension, and then a simple downsampling layer
+TABLE I
+NETWORK PARAMETERS OF SALIENCY-NET
+is applied to obtain the ﬁnal saliency map for the point
+cloud. Table I records the speciﬁc network parameters of
+Saliency-Net.
+Saliency-Net explicitly integrates multiple point cloud fea-
+tures and is trained under supervision using our designed
+point cloud dataset with saliency ground truth. Compared to
+methods using only single information, this approach ensures
+the completeness of saliency prediction. Even in semantically
+Authorized licensed use limited to: FUDAN UNIVERSITY. Downloaded on May 14,2026 at 05:48:56 UTC from IEEE Xplore.  Restrictions apply. 
+WANG et al.: SALIENCY-LOAM: SALIENCY-BASED LiDAR ODOMETRY AND MAPPING
+8500309
+sparse scenarios, it eﬀectively predicts saliency by integrating
+geometric and intensity information, thereby better optimizing
+SLAM tasks.
+In network training, we perform supervised training on two
+subnetworks using two loss functions. For the point cloud
+saliency prediction network, its loss function is as follows:
+L (p, g) =
+X
+i
+|pi −gi|
+(11)
+pi =
+exp
+ xp
+i
+
+PN
+i=1 exp
+ xp
+i
+,
+gi =
+exp
+ xg
+i
+
+PN
+i=1 exp
+ xg
+i
+
+(12)
+where p is the predicted probability distribution of saliency
+from the network, g is the probability distribution of
+the ground-truth saliency for the point cloud, and x
+=
+(x1, . . . , xi, . . . , xN) is the set of unnormalized saliency values
+for the predicted saliency map (xp) and the ground-truth
+saliency map (xg).
+As for the loss function used in training the semantic
+segmentation head network, we use the weighted cross-entropy
+loss function to supervise the network training, as shown in the
+following formula, M represents the number of categories, the
+value of yc is 0 or 1, pc represents the probability of predicted
+pixels belong to the category c:
+L = −
+M
+X
+c=1
+wcyclog (pc) , wc = N −Nc
+N
+.
+(13)
+When calculating the weight wc, N represents the total number
+of pixels, and Nc represents the number of pixels with the true
+class label being c.
+C. Feature Matching and Pose Estimation
+The line feature point Pc
+l of the current frame is converted
+to the reference frame as Pl in the reference frame coordinate,
+the nearest line feature point to Pl in the reference frame is Al,
+and the nearest line feature point Bl that locates on the laser
+scanning line adjacent to the point Al, the point cloud saliency
+values of these points are S Al, S Bl and S Pl. To ensure that the
+identiﬁed points belong to line features within the same local
+region, we set an error threshold THerror, only when the points
+satisﬁed with |S Pl −S Al| < THerror and |S Pl −S Bl| < THerror
+will be chosen
+el = wldl =
+ aS 2
+Pl + b
+ ˇˇˇ−−−→
+PlAl × −−−→
+PlBl
+ˇˇˇ
+255
+ˇˇˇ−−−→
+AlBl
+ˇˇˇ
+.
+(14)
+Diﬀerent from the tradition that takes the distance dl as the
+residual term, it does not distinguish the well-characterized
+point. We use the wl = (aS 2
+Pl)/255 as the point cloud saliency
+weight, where a and b are the constants, giving diﬀerent point
+cloud features with diﬀerent weights.
+For the plane feature point Pc
+P of the current frame, it is
+transformed into the reference frame coordinate as PP, and
+then a search is performed in the reference frame to ﬁnd the
+nearest plane feature point AP to the PP. Additionally, the
+plane feature point BP on the same LiDAR scanning line as
+AP and the plane feature point CP on the adjacent LiDAR
+scanning line are also found, and these three points do not lie
+on the same line.
+ep = wpdp =
+
+cS 2
+Pp + d
+ ˇˇˇ−−−−→
+PpAp ·
+−−−−→
+ApBp × −−−−→
+ApCp
+ˇˇˇ
+255
+ˇˇˇ−−−−→
+ApBp × −−−−→
+ApCp
+ˇˇˇ
+.
+(15)
+Similarly, the point cloud saliency weight is wp
+=
+(cS 2
+Pp + d)/255, c and d are constants and S Pp is the point
+cloud saliency value of PP. So the total loss function is as
+follows:
+loss =
+Nl
+X
+i=1
+ei
+l +
+Np
+X
+j=1
+ej
+p =
+N
+X
+i=1
+e (Pi) =
+N
+X
+i=1
+e
+ TPc
+i
+
+.
+(16)
+The key to pose estimation is to iteratively optimize the
+optimal transformation matrix T, which includes the rotation
+matrix R and the translation vector t, then calculate the ﬁrst-
+order Jacobian matrix J of the residual with respect to the
+optimization variable
+J = ∂(loss)
+∂T rc
+=
+∂
+PN
+i=1 e
+ T r
+cPc
+i
+
+∂T rc
+=
+N
+X
+i=1
+∂
+ e
+ T r
+cPc
+i
+
+∂T rc
+.
+(17)
+The perturbation ∆T is added to the transformation matrix
+T by left multiplication, and the derivative is calculated using
+the Lie algebra approach
+∂
+ e
+ TPc
+i
+
+∂δξ
+= ∂(e (Pi))
+∂(Pi)
+∂
+ TPc
+i
+
+∂δξ
+.
+(18)
+The ﬁrst part ∂(e(Pi))/∂(Pi) is the derivative of the residual
+term e(Pi) on the points Pi, Pi includes the line feature points
+and plane feature points, the second part ∂(TPc
+i )/∂δξ is the
+derivative of point Pi on the Lie algebra δξ of perturbation term
+∆T. By calculating the derivative of the residual term with
+respect to the pose perturbation, the ﬁrst-order Jacobian of the
+loss function with respect to the optimization variable can be
+obtained, which can guide iterative optimization to compute
+the best pose.
+Furthermore, we propose a method capable of eﬀectively
+suppressing interference from dynamic objects. Speciﬁcally,
+the pose estimation results for frame-to-frame and frame-
+to-local-map are computed separately. In the frame-to-frame
+estimation, feature matching is constrained by saliency
+weights, whereas the frame-to-map estimation is performed
+without incorporating saliency constraints. If dynamic points
+exist in the scene, the two estimation approaches will yield
+signiﬁcant pose discrepancies. Subsequently, a threshold is
+applied to evaluate the deviation between these estimates. If
+the deviation exceeds the threshold, the point is considered
+potentially dynamic. It is then discarded and excluded from
+computation, thereby reducing the weight of dynamic points
+in the pose estimation process.
+The pseudocode presented in Algorithm 1 illustrates the
+entire execution process of our proposed algorithm.
+III. BENCHMARK RESULTS
+A. Validation of the Eﬀectiveness of the Saliency Dataset
+we process the KITTI dataset sequences 00–10 using the
+same data processing approach and test both the original
+Authorized licensed use limited to: FUDAN UNIVERSITY. Downloaded on May 14,2026 at 05:48:56 UTC from IEEE Xplore.  Restrictions apply. 
+8500309
+IEEE TRANSACTIONS ON INSTRUMENTATION AND MEASUREMENT, VOL. 75, 2026
+Algorithm 1 Feature Matching and Pose Estimation Method
+Based on Point Cloud Saliency
+Input: Point cloud feature Pi in total N, tag features Plabel
+i
+in total Nlabel, S i is the point cloud saliency value,
+Plabel
+i
+∈Pi, S label
+i
+∈S i setting the percentage threshold
+value THper, and the pose deviation threshold THpose
+Output: The ﬁnal pose estimation result posef
+1: per = Nlabel/N;
+2: if per ≤THper then:
+3:
+S label
+i
+= 0;
+4:
+pose1 = Estiscan
+scan(Pi, S i);
+5:
+posef = Optim(Estimap
+scan(Pi, S i, pose1), pose1);
+6: else:
+7:
+pose2 = Estiscan
+scan(Pi, S i);
+8:
+S tmp
+i
+= S label
+i
+, S label
+i
+= 0;
+9:
+pose3 = Estimap
+scan(Pi, S i, pose2);
+10:
+if (pose3)T pose2 ≥THpose then:
+11:
+pose f = Optim(pose3, pose2);
+12:
+else:
+13:
+S label
+i
+= S tmp
+i
+;
+14:
+pose f = Optim(Estimap
+scan(Pi, S i, pose3), pose2)
+TABLE II
+ABLATION STUDY ON M2DGR DATASET AND KITTI DATASET
+dataset and the saliency-weighted dataset with state-of-the-
+art methods. We employ our designed saliency weights to
+constrain feature matching for optimizing pose estimation.
+The experimental results, recorded in Table II, demonstrate
+that the ATE performance of all methods improves with the
+incorporation of saliency weights, conﬁrming the eﬀectiveness
+of our saliency dataset.
+B. Ablation Study
+We conduct ablation experiments on the KITTI dataset and
+the M2DGR dataset to quantitatively analyze the independent
+contributions of intensity information and semantic informa-
+tion from point clouds to the performance of Saliency-LOAM.
+Speciﬁcally, for the w/o Intensity scheme, we remove the
+intensity information from the input to the Saliency-Net. As
+a result, the network relies solely on semantic and geometric
+information to predict saliency. For the w/o Semantic scheme,
+we disable Fig. 4(c), during training, point cloud image data
+only passes through Fig. 4(b), which prevents the network
+from predicting semantic information.
+As shown in Table II, regardless of which type of infor-
+mation is removed, the performance falls short of that of
+the complete Saliency-LOAM. This demonstrates that the
+intensity information and semantic information of point clouds
+are complementary and indispensable for identifying more
+stable feature points within the point clouds, which proves
+the eﬀectiveness of the point cloud saliency mechanism.
+C. State-of-the-Art Comparison
+To evaluate the performance disparities between our method
+and existing state-of-the-art approaches, we conduct tests on
+the KITTI dataset and the M2DGR dataset. For the KITTI
+dataset, we choose A-LOAM [15], F-LOAM [16], SUMA++
+[17], KISS-ICP [18], MULLS [19], CT-ICP [20], X-ICP [21],
+KDD-LOAM [22], SG-SLAM [10], and Intensity-SLAM [23].
+For the M2DGR dataset, we select A-LOAM [15], LIO-SAM
+[24], DLO [25], MARS [26], In-LIO [27], Point-LIO [28],
+X-ICP [21], LOG-LIO [29], SG-SLAM [10], Intensity-SLAM
+[23], and FAST-LIO2 [30]. Among them, Intensity-SLAM is a
+method based on intensity information, while SUMA++ and
+SG-SLAM are methods based on semantic information. We
+record the results in Tables III and IV respectively.
+Furthermore, we compare the computation times of these
+methods on KITTI Sequence 03, as presented in Table V.
+If the computational time is less than 100 ms/scan (more
+than 10 Hz), it indicates the feasibility of achieving real-time
+localization and mapping. We further decompose the main
+time-consuming modules of the entire algorithm, including
+saliency prediction, feature extraction, feature matching and
+pose optimization, and map update. The results show that
+saliency prediction and feature matching & pose optimization
+consume the most time, providing clear directions for devel-
+oping a more lightweight LiDAR SLAM system in the future.
+D. Real-World Experiments
+To further validate the practicality of Saliency-LOAM, we
+conduct experiments in real-world environments. We evaluate
+the localization performance of various methods on the campus
+dataset using the absolute trajectory error (ATE) calculated
+in meters. Table VI presents the performance of existing
+state-of-the-art methods and our proposed method across all
+sequences. It can be observed that our method outperforms the
+others in most sequences, indicating its superior performance
+in real-world complex environments, which demonstrates the
+Authorized licensed use limited to: FUDAN UNIVERSITY. Downloaded on May 14,2026 at 05:48:56 UTC from IEEE Xplore.  Restrictions apply. 
+WANG et al.: SALIENCY-LOAM: SALIENCY-BASED LiDAR ODOMETRY AND MAPPING
+8500309
+TABLE III
+SLAM PERFORMANCE COMPARISON ON THE KITTI DATASET WITH ATE
+TABLE IV
+SLAM PERFORMANCE COMPARISON ON THE M2DGR DATASET WITH ATE
+TABLE V
+COMPARISON RESULTS OF THE COMPUTATIONAL TIME OF ALGORITHMS
+ON KITTI SEQUENCE 03
+eﬀective contribution of intensity and semantic information to
+the traditional geometric LiDAR SLAM technique.
+To validate mapping consistency, we analyze the mapping
+quality of our method, Fast-LIO2, and X-ICP on Sequence
+05 and Sequence 06 of the campus dataset. During the data
+collection process, we commence from the area marked by the
+red box, drive around the building complex, and return to the
+starting point. Therefore, under ideal conditions, the mapped
+Fig. 5.
+Comparison of mapping quality on Sequence 05 (top row) and
+Sequence 06 (bottom row) of the campus dataset. (a) Global map. (b) Degree
+of overlap between the map at the starting and ending points. (c) Magniﬁed
+local details.
+sections at the starting and ending points should overlap.
+In Fig. 5(a) represents an example of the global map, (b)
+illustrates the degree of overlap between the mapped sections
+at the starting and ending points, and (c) presents an example
+of local mapping quality. It is observed that, compared to
+other methods, our method achieves a higher degree of overlap
+between the starting and ending points, whereas other methods
+exhibit noticeable deviation. Additionally, the global map
+constructed by our method demonstrates superior detail.
+We also conduct a quantitative analysis comparing our
+proposed method with other approaches in terms of rota-
+tional drift and altitude deviation. The results are recorded in
+Table VII, and the corresponding data acquisition environment
+and mapping outcomes are depicted in Fig. 6(a) and (b).
+1) Rotary Drift Test: As shown in Fig. 6(a), this depicts
+a round-trip road scenario, starting from landmark P3, reach-
+Authorized licensed use limited to: FUDAN UNIVERSITY. Downloaded on May 14,2026 at 05:48:56 UTC from IEEE Xplore.  Restrictions apply. 
+8500309
+IEEE TRANSACTIONS ON INSTRUMENTATION AND MEASUREMENT, VOL. 75, 2026
+TABLE VI
+SLAM PERFORMANCE COMPARISON ON THE CAMPUS DATASET WITH ATE
+TABLE VII
+COMPARISON OF LOCALIZATION PERFORMANCE IN COMPLEX ENVIRONMENTS
+Fig. 6.
+Results of rotary drift test and height deviation test. (a) Mapping
+results of large angle rotation scene. (b) Mapping results of height in
+fast-changing scenes.
+ing the U-turn landmark P4, performing a U-turn, and then
+returning from P4 to P3. At this point, the horizontal angle
+diﬀers by 180◦from the initial angle. This scenario is used
+to simulate extremely large-angle rotations, which greatly
+test the rotational robustness of the algorithms. We measure
+the rotational robustness of each localization algorithm in
+this scenario by calculating the horizontal angle between the
+estimated poses at the ﬁrst and last moments (both at landmark
+P3) for each algorithm.
+2) Height Deviation Test: Due to the frequent misplace-
+ment of the LiDAR odometry algorithm in the vertical height
+direction, we conduct a test in a scenario with a two-story
+height drop to simulate the rapid changes in vehicle height
+within a short period of time, as shown in Fig. 6(b). Starting
+from the marked point P5, we descend and ascend once before
+returning to the origin. Therefore, the true height deviation
+between the initial and ﬁnal moments is approximately 0 m.
+By comparing the height oﬀset errors of the initial and ﬁnal
+poses estimated by each method in this scenario.
+As indicated in Table VII, our method can fully leverage
+the surrounding saliency information, resulting in localization
+outcomes that are closer to the ground truth, thereby achieving
+more robust and accurate localization.
+IV. CONCLUSION
+This article proposes a point cloud saliency mechanism
+that focuses on high-quality point cloud regions, and presents
+the ﬁrst LiDAR odometry based on the point cloud saliency.
+Speciﬁcally, we design a deep learning network framework to
+predict point cloud saliency, considering distance information,
+local curvature, intensity information, and semantic informa-
+tion. Compared to existing LiDAR odometry, our method
+emphasizes high-quality point cloud regions and assigns them
+higher weights during the computation process, reducing the
+negative impact of noise and unstable points. We validate the
+eﬀectiveness of the point cloud saliency mechanism through
+ablation studies and comparative experiments on the KITTI
+and M2DGR datasets. To demonstrate the practicality of our
+proposed method, we conduct extensive comparative experi-
+ments in real-world environments, and the results show that
+our LiDAR odometry method outperforms other state-of-the-
+art methods, signiﬁcantly improving robustness and accuracy.
+REFERENCES
+[1]
+S. Wen et al., “Dynamic SLAM: A visual SLAM in outdoor dynamic
+scenes,” IEEE Trans. Instrum. Meas., vol. 72, pp. 1–11, 2023.
+[2]
+F. Fu, J. Yang, J. Ma, and J. Zhang, “Dynamic visual SLAM based on
+probability screening and weighting for deep features,” Measurement,
+vol. 236, Aug. 2024, Art. no. 115127.
+[3]
+M. Xu, S. Lin, J. Wang, and Z. Chen, “A LiDAR SLAM system
+with geometry feature group-based stable feature selection and three-
+stage loop closure optimization,” IEEE Trans. Instrum. Meas., vol. 72,
+pp. 1–10, 2023.
+[4]
+H. Guo, J. Zhu, and Y. Chen, “E-LOAM: LiDAR odometry and mapping
+with expanded local structural information,” IEEE Trans. Intell. Vehicles,
+vol. 8, no. 2, pp. 1911–1921, Feb. 2023.
+[5]
+S. Guo, Z. Rong, S. Wang, and Y. Wu, “A LiDAR SLAM with PCA-
+based feature extraction and two-stage matching,” IEEE Trans. Instrum.
+Meas., vol. 71, pp. 1–11, 2022.
+Authorized licensed use limited to: FUDAN UNIVERSITY. Downloaded on May 14,2026 at 05:48:56 UTC from IEEE Xplore.  Restrictions apply. 
+WANG et al.: SALIENCY-LOAM: SALIENCY-BASED LiDAR ODOMETRY AND MAPPING
+8500309
+[6]
+N. Li, Y. Yao, X. Xu, Y. Peng, Z. Wang, and H. Wei, “An eﬃcient
+LiDAR SLAM with angle-based feature extraction and voxel-based
+ﬁxed-lag smoothing,” IEEE Trans. Instrum. Meas., vol. 73, pp. 1–13,
+2024.
+[7]
+K. Wang, S. Ma, F. Ren, and J. Lu, “SBAS: Salient bundle adjustment
+for visual SLAM,” IEEE Trans. Instrum. Meas., vol. 70, pp. 1–9, 2021.
+[8]
+H. Li, B. Tian, H. Shen, and J. Lu, “An intensity-augmented LiDAR-
+inertial SLAM for solid-state LiDARs in degenerated environments,”
+IEEE Trans. Instrum. Meas., vol. 71, pp. 1–10, 2022.
+[9]
+Z. Chen et al., “IGE-LIO: Intensity gradient enhanced tightly cou-
+pled LiDAR-inertial odometry,” IEEE Trans. Instrum. Meas., vol. 73,
+pp. 1–11, 2024.
+[10] N. Wang, H. Lu, Z. Zheng, H. Wang, Y.-H. Liu, and X. Chen,
+“Leveraging semantic graphs for eﬃcient and robust LiDAR SLAM,”
+2025, arXiv:2503.11145.
+[11] J. Behley et al., “SemanticKITTI: A dataset for semantic scene under-
+standing of LiDAR sequences,” in Proc. IEEE/CVF Int. Conf. Comput.
+Vis. (ICCV), Oct. 2019, pp. 9297–9307.
+[12] L. Itti, C. Koch, and E. Niebur, “A model of saliency-based visual
+attention for rapid scene analysis,” IEEE Trans. Pattern Anal. Mach.
+Intell., vol. 20, no. 11, pp. 1254–1259, Nov. 1998.
+[13] O. Ronneberger, P. Fischer, and T. Brox, “U-Net: Convolutional net-
+works for biomedical image segmentation,” in Proc. 18th Int. Conf. Med.
+Image Comput. Comput.-Assist. Intervent., vol. 9351. Cham, Switzer-
+land: Springer, 2015, pp. 234–241.
+[14] Y. Zhao, L. Bai, and X. Huang, “FIDNet: LiDAR point cloud semantic
+segmentation with fully interpolation decoding,” in Proc. IEEE/RSJ Int.
+Conf. Intell. Robots Syst. (IROS), Sep. 2021, pp. 4453–4458.
+[15] J. Zhang and S. Singh, “LOAM: LiDAR odometry and mapping in real-
+time,” in Proc. Robot., Sci. Syst. Conf., Jul. 2014, pp. 1–9.
+[16] H. Wang, C. Wang, C.-L. Chen, and L. Xie, “F-LOAM: Fast LiDAR
+odometry and mapping,” in Proc. IEEE/RSJ Int. Conf. Intell. Robots
+Syst. (IROS), Sep. 2021, pp. 4390–4396.
+[17] X. Chen, A. Milioto, E. Palazzolo, P. Gigu`ere, J. Behley, and
+C. Stachniss, “SuMa++: Eﬃcient LiDAR-based semantic SLAM,” in
+Proc. IEEE/RSJ Int. Conf. Intell. Robots Syst. (IROS), Nov. 2019,
+pp. 4530–4537.
+[18] I. Vizzo, T. Guadagnino, B. Mersch, L. Wiesmann, J. Behley, and
+C. Stachniss, “KISS-ICP: In defense of point-to-point ICP—Simple,
+accurate, and robust registration if done the right way,” IEEE Robot.
+Autom. Lett., vol. 8, no. 2, pp. 1029–1036, Feb. 2023.
+[19] Y. Pan, P. Xiao, Y. He, Z. Shao, and Z. Li, “MULLS: Versatile LiDAR
+SLAM via multi-metric linear least square,” in Proc. IEEE Int. Conf.
+Robot. Autom. (ICRA), May 2021, pp. 11633–11640.
+[20] P. Dellenbach, J.-E. Deschaud, B. Jacquet, and F. Goulette, “CT-ICP:
+Real-time elastic LiDAR odometry with loop closure,” in Proc. Int.
+Conf. Robot. Autom. (ICRA), May 2022, pp. 5580–5586.
+[21] T. Tuna, J. Nubert, Y. Nava, S. Khattak, and M. Hutter, “X-ICP:
+Localizability-aware LiDAR registration for robust localization in
+extreme environments,” IEEE Trans. Robot., vol. 40, pp. 452–471, 2024.
+[22] R. Huang, M. Zhao, J. Chen, and L. Li, “KDD-LOAM: Jointly
+learned keypoint detector and descriptors assisted LiDAR odometry and
+mapping,” in Proc. IEEE Int. Conf. Robot. Autom. (ICRA), May 2024,
+pp. 8559–8565.
+[23] H. Wang, C. Wang, and L. Xie, “Intensity-SLAM: Intensity assisted
+localization and mapping for large scale environment,” IEEE Robot.
+Autom. Lett., vol. 6, no. 2, pp. 1715–1721, Apr. 2021.
+[24] T. Shan, B. Englot, D. Meyers, W. Wang, C. Ratti, and D. Rus, “LIO-
+SAM: Tightly-coupled LiDAR inertial odometry via smoothing and
+mapping,” in Proc. IEEE/RSJ Int. Conf. Intell. Robots Syst. (IROS), Oct.
+2020, pp. 5135–5142.
+[25] K. Chen, B. T. Lopez, A.-A. Agha-Mohammadi, and A. Mehta, “Direct
+LiDAR odometry: Fast localization with dense point clouds,” IEEE
+Robot. Autom. Lett., vol. 7, no. 2, pp. 2000–2007, Apr. 2022.
+[26] J. Quenzel and S. Behnke, “Real-time multi-adaptive-resolution-surfel
+6D LiDAR odometry using continuous-time trajectory optimization,”
+in Proc. IEEE/RSJ Int. Conf. Intell. Robots Syst. (IROS), Sep. 2021,
+pp. 5499–5506.
+[27] H. Zhang, R. Xiao, J. Li, C. Yan, and H. Tang, “A high-precision
+LiDAR-inertial odometry via invariant extended Kalman ﬁltering and
+eﬃcient surfel mapping,” IEEE Trans. Instrum. Meas., vol. 73, pp. 1–11,
+2024.
+[28] D. He, W. Xu, N. Chen, F. Kong, C. Yuan, and F. Zhang, “Point-LIO:
+Robust high-bandwidth light detection and ranging inertial odometry,”
+Adv. Intell. Syst., vol. 5, no. 7, Jul. 2023, Art. no. 2200459.
+[29] K. Huang, J. Zhao, Z. Zhu, C. Ye, and T. Feng, “LOG-LIO: A LiDAR-
+inertial odometry with eﬃcient local geometric information estimation,”
+IEEE Robot. Autom. Lett., vol. 9, no. 1, pp. 459–466, Jan. 2024.
+[30] W. Xu, Y. Cai, D. He, J. Lin, and F. Zhang, “FAST-LIO2: Fast
+direct LiDAR-inertial odometry,” IEEE Trans. Robot., vol. 38, no. 4,
+pp. 2053–2073, Aug. 2022.
+Ke Wang (Member, IEEE) was born in Huaian,
+Jiangsu, China, in 1984. He received the B.S. and
+M.S. degrees in vehicle engineering and the Ph.D.
+degree in mechanical engineering from Hunan Uni-
+versity, Hunan, China, in 2007, 2009, and 2013,
+respectively.
+He was a Post-Doctoral Researcher at the College
+of Engineering, University of Michigan, Ann Arbor,
+MI, USA, in 2016 and 2017. From 2014 to 2016,
+he was an Assistant Professor with the Automobile
+Engineering Department. Since 2017, he has been an
+Associate Professor with the State Key Laboratory of Mechanical Transmis-
+sion, Chongqing University, Chongqing, China. He is the author of one book,
+more than 20 articles, and more than 15 inventions. His research interests are
+the intelligent vehicle, environment perception, and AI.
+Kai Chen was born in Bijie, Guizhou, China,
+in 2002. He received the B.S. degree in process
+equipment and control engineering from Beijing
+University of Chemical Technology, Beijing, China,
+in 2023. He is currently pursuing the M.S. degree
+with the College of Mechanical and Vehicle Engi-
+neering, Chongqing University, Chongqing, China.
+His
+research
+interests
+include
+quantiﬁcation
+and application of uncertainty and simultaneous
+localization and mapping (SLAM).
+Juwei Guo was born in Ganzhou, Jiangxi, China, in
+2000. He received the B.S. degree (Hons.) in vehi-
+cle engineering from Northeast Forestry University,
+Harbin, China, in 2022. He is currently pursuing the
+M.S. degree in vehicle engineering with Chongqing
+University, Chongqing, China.
+His
+research
+interests
+include
+simultaneous
+localization and mapping (SLAM) for intelligent
+robots or vehicles, LiDAR odometry, and robotics.
+Jianbo Lu (Fellow, IEEE) received the Ph.D. degree
+in aerospace engineering from Purdue University,
+West Lafayette, IN, USA, in 1997.
+He has more than 20 years of industry experience,
+including technical leadership positions. With more
+than 90 articles and 150 U.S. patents in vehicle
+controls, automation, safety, performance, robotics,
+and mechatronics, his contributions can be found in
+millions of vehicles on the road.
+Dr. Lu is a fellow of SAE, ASME, and AAIA. He
+received the Highest Corporate Award HFTA at Ford
+Motor Company twice. He was an Associate Editor of IEEE TRANSACTIONS
+ON CONTROL SYSTEMS TECHNOLOGY and Control Practice Engineering
+(IFAC). He is on the Editorial Board of Journal of Autonomous Vehicles and
+Systems (ASME).
+Authorized licensed use limited to: FUDAN UNIVERSITY. Downloaded on May 14,2026 at 05:48:56 UTC from IEEE Xplore.  Restrictions apply. 
