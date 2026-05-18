@@ -100,8 +100,17 @@ class LineFeatureExtractor:
         chord = p_end - p_start
         chord_len = float(np.hypot(chord[0], chord[1]))
 
-        if chord_len < 1e-6:
-            return
+        # Relaxed threshold: 1 cm instead of 1 μm to avoid skipping
+        # closed loops (e.g. 360° scans where first/last points overlap)
+        if chord_len < 1e-2:
+            # Use the pair of points with maximum separation instead
+            dists = np.linalg.norm(seg_pts[:, None] - seg_pts[None, :], axis=2)
+            i_max, j_max = np.unravel_index(np.argmax(dists), dists.shape)
+            p_start, p_end = seg_pts[i_max], seg_pts[j_max]
+            chord = p_end - p_start
+            chord_len = float(np.hypot(chord[0], chord[1]))
+            if chord_len < 1e-2:
+                return
 
         # Find point with maximum perpendicular distance to the chord
         max_dist = 0.0
