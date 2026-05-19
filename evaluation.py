@@ -9,7 +9,10 @@
 
 from __future__ import annotations
 
-import sys
+import sys, os
+# 确保项目根目录在 Python 路径中
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
 import numpy as np
 import matplotlib.pyplot as plt
 from typing import List, Tuple
@@ -48,7 +51,7 @@ def local_to_world(pose: np.ndarray, pts_local: np.ndarray) -> np.ndarray:
 def get_star_ground_truth(center: Tuple[float, float] = (10.0, 10.0)) -> np.ndarray:
     """Return the true star outline vertices (world coordinates, closed polygon)."""
     cx, cy = center
-    R, r = 0.6, 0.2
+    R, r = 1.2, 0.4   # 放大 2 倍
     n = 10
     angles = np.linspace(0, 2 * np.pi, n, endpoint=False) - np.pi / 2
     radii = np.array([R if i % 2 == 0 else r for i in range(n)])
@@ -59,14 +62,14 @@ def get_star_ground_truth(center: Tuple[float, float] = (10.0, 10.0)) -> np.ndar
 
 
 def in_star_region(
-    points: np.ndarray, center: Tuple[float, float] = (10.0, 10.0), radius: float = 1.5
+    points: np.ndarray, center: Tuple[float, float] = (10.0, 10.0), radius: float = 2.5
 ) -> np.ndarray:
     """Boolean mask for points inside a circular ROI around the star."""
     return np.linalg.norm(points - np.array(center), axis=1) < radius
 
 
 def segment_fully_in_region(
-    seg_endpoints: np.ndarray, center: Tuple[float, float] = (10.0, 10.0), radius: float = 1.5
+    seg_endpoints: np.ndarray, center: Tuple[float, float] = (10.0, 10.0), radius: float = 2.5
 ) -> bool:
     """Check whether *both* endpoints of a segment lie inside the star ROI."""
     dists = np.linalg.norm(seg_endpoints - np.array(center), axis=1)
@@ -187,13 +190,13 @@ def run_comparison() -> None:
     fused_high_sal_star_pts = int(np.sum(fused_star_mask & fused_mask))
 
     base_star_segs = sum(
-        1 for seg in base_segs_world if segment_fully_in_region(seg, radius=1.5)
+        1 for seg in base_segs_world if segment_fully_in_region(seg, radius=2.5)
     )
     sal_star_segs = sum(
-        1 for seg in sal_segs_world if segment_fully_in_region(seg, radius=1.5)
+        1 for seg in sal_segs_world if segment_fully_in_region(seg, radius=2.5)
     )
     fused_star_segs = sum(
-        1 for seg in fused_segs_world if segment_fully_in_region(seg, radius=1.5)
+        1 for seg in fused_segs_world if segment_fully_in_region(seg, radius=2.5)
     )
 
     err_base = contour_matching_error(base_pts[star_mask_base], star_gt[:-1])
@@ -219,17 +222,17 @@ def run_comparison() -> None:
         # Draw only fully-contained segments with thick lines
         drawn = False
         for seg in segs:
-            if segment_fully_in_region(seg, radius=1.5):
+            if segment_fully_in_region(seg, radius=2.5):
                 lbl = "线特征" if not drawn else None
                 ax.plot(seg[:, 0], seg[:, 1], color=color_segs, linewidth=seg_width,
                         solid_capstyle="round", label=lbl, zorder=4)
                 drawn = True
         # Draw a subtle circular ROI background
-        circle = plt.Circle((10, 10), 1.5, color="lightgray", alpha=0.15, zorder=1)
+        circle = plt.Circle((10, 10), 2.5, color="lightgray", alpha=0.15, zorder=1)
         ax.add_patch(circle)
         ax.set_title(title, fontsize=14, fontweight="bold")
-        ax.set_xlim(8.3, 11.7)
-        ax.set_ylim(8.3, 11.7)
+        ax.set_xlim(7.8, 12.2)
+        ax.set_ylim(7.8, 12.2)
         ax.set_aspect("equal")
         ax.grid(True, linestyle=":", alpha=0.4)
         if annotate_text:

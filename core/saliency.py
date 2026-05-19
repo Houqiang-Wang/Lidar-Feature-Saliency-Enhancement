@@ -80,8 +80,11 @@ class SaliencyEstimator:
             saliency = np.zeros(n_valid, dtype=np.float32)
             return points_local, valid_mask, saliency
 
-        # 1. Local curvature via K-NN PCA
-        curvature = self._compute_curvature(points_local)
+        # 1. Local curvature via K-NN PCA + scan-order angle curvature
+        curvature_knn = self._compute_curvature(points_local)
+        curvature_scan = self._compute_scan_angle_curvature(points_local)
+        # 扫描顺序转角对尖角更敏感，给予更高权重
+        curvature = 0.3 * curvature_knn + 0.7 * curvature_scan
         c_norm = self._min_max_norm(curvature)
 
         # 2. Intensity gradient (adjacent difference)
@@ -136,6 +139,39 @@ class SaliencyEstimator:
 
             if eigvals[1] > 1e-8:
                 curvature[i] = eigvals[0] / eigvals[1]
+
+        return curvature
+
+    def _compute_scan_angle_curvature(self, points: np.ndarray) -> np.ndarray:
+        """基于扫描顺序邻域的局部转角曲率。
+
+        对于2D激光雷达，按角度排序的邻居比空间KNN更能准确反映
+        局部几何形状。尖角（内角很小）处向量转向接近 π，曲率最大；
+        直线段转向接近 0，曲率最小。
+        """
+        n = len(points)
+        curvature = np.zeros(n, dtype=np.float32)
+        k = max(2, self.k // 2)  # 前后各k个邻居
+
+        for i in range(n):
+            prev_idx = (i - k) % n
+            next_idx = (i + k) % n
+
+            p = points[i]
+            p_prev = points[prev_idx]
+            p_next = points[next_idx]
+
+            v1 = p - p_prev
+            v2 = p_next - p
+            norm1 = float(np.linalg.norm(v1))
+            norm2 = float(np.linalg.norm(v2))
+
+            if norm1 > 1e-6 and norm2 > 1e-6:
+                cos_angle = np.dot(v1, v2) / (norm1 * norm2)
+                cos_angle = np.clip(cos_angle, -1.0, 1.0)
+                angle = np.arccos(cos_angle)
+                # π - angle: 尖角处 angle 很小 → 曲率接近 π
+                curvature[i] = np.pi - angle
 
         return curvature
 

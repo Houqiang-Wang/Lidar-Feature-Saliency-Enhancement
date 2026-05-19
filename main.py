@@ -17,7 +17,7 @@ import numpy as np
 
 from core.engine import SimulationEngine
 from core.environment import MapEnvironment
-from core.sensor import LidarA1
+from core.sensor import LidarA1, LidarConfig
 from core.saliency import SaliencyEstimator
 from core.feature_extraction import LineFeatureExtractor
 from core.mapping import MapManager
@@ -37,12 +37,21 @@ def main() -> None:
 
     engine = SimulationEngine(dt=dt, rtf=real_time_factor)
     env = MapEnvironment()
-    lidar = LidarA1()
+
+    # 高噪声雷达配置，凸显轮廓识别差异
+    high_noise_cfg = LidarConfig(
+        noise_ratio_near=0.04,    # 近距离噪声 4%
+        noise_ratio_far=0.06,     # 远距离噪声 6%
+        angle_noise_std=np.deg2rad(0.5),  # 角度抖动 0.5°
+        dropout_rate=0.02,        # 丢包率 2%
+    )
+    lidar = LidarA1(config=high_noise_cfg)
 
     # =====================================================================
     # 2. Saliency-LOAM 模块初始化
     # =====================================================================
-    saliency_est = SaliencyEstimator(k_neighbors=5, alpha=0.5, beta=0.3, gamma=0.2)
+    # 提高曲率权重(alpha)，降低语义/强度权重，使几何棱角更突出
+    saliency_est = SaliencyEstimator(k_neighbors=4, alpha=0.92, beta=0.03, gamma=0.05)
     line_extractor = LineFeatureExtractor(split_thresh=0.05, min_points=5)
     mapper = MapManager(keyframe_dist=0.5, keyframe_angle=np.deg2rad(20.0))
     matcher = ScanMatcher(max_corr_dist=1.0)
@@ -74,22 +83,19 @@ def main() -> None:
         # ---- 4.1 物理更新 (真值) ------------------------------------
         gt_pose = apply_diff_drive_kinematics(gt_pose, v, w, dt)
 
-        # ---- 4.2 雷达采样 (5.5 Hz) -----------------------------------
+        # ---- 4.2 里程计递推 (估计位姿也需要同步推进) ----------------
+        est_pose = apply_diff_drive_kinematics(est_pose, v, w, dt)
+
         if lidar.ready(engine.get_time()):
             scan = lidar.scan(gt_pose, env)
 
-            # ---- 4.3 显著性估计 --------------------------------------
+            # ---- 4.4 显著性估计 --------------------------------------
             points_local, valid_mask, saliency = saliency_est.compute(scan)
 
             # ---- 4.4 线特征提取 --------------------------------------
             segments = line_extractor.extract(points_local, saliency)
 
-            # ---- 4.5 点云转到世界坐标 (用于可视化 & 配准) ------------
-            cos_t, sin_t = np.cos(est_pose[2]), np.sin(est_pose[2])
-            R_est = np.array([[cos_t, -sin_t], [sin_t, cos_t]])
-            world_points = (R_est @ points_local.T).T + est_pose[:2]
-
-            # ---- 4.6 动态滤波 + 位姿估计 -----------------------------
+            # ---- 4.5 动态滤波 + 位姿估计 -----------------------------
             local_map = mapper.get_local_map()
             init_guess = est_pose.copy()
 
@@ -102,6 +108,11 @@ def main() -> None:
                 matcher=matcher,
             )
 
+            # ---- 4.6 点云转到世界坐标 (使用优化后的位姿) --------------
+            cos_t, sin_t = np.cos(est_pose[2]), np.sin(est_pose[2])
+            R_est = np.array([[cos_t, -sin_t], [sin_t, cos_t]])
+            world_points = (R_est @ points_local.T).T + est_pose[:2]
+
             # ---- 4.7 关键帧管理 --------------------------------------
             if mapper.should_insert(est_pose):
                 mapper.add_keyframe(
@@ -111,7 +122,7 @@ def main() -> None:
                     timestamp=engine.get_time(),
                 )
 
-            # ---- 4.8 可视化 ------------------------------------------
+            # ---- 4.9 可视化 ------------------------------------------
             viz.update(
                 gt_pose=gt_pose,
                 est_pose=est_pose,
@@ -127,7 +138,7 @@ def main() -> None:
             # 保存当前帧世界点云供下一帧帧间配准使用
             prev_world_points = world_points.copy()
 
-        # ---- 4.9 推进仿真时钟 ---------------------------------------
+        # ---- 4.10 推进仿真时钟 ---------------------------------------
         engine.step()
 
     # =====================================================================

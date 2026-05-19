@@ -20,9 +20,9 @@ class MapEnvironment:
                       (self.size_px - margin, self.size_px - margin), 255, thickness)
 
     def _add_star_obstacle(self):
-        # 建立直径 1.2m 的五角星 (R=0.6, r=0.2)
+        # 放大五角星 — R=1.2m, r=0.4m（原始 0.6m/0.2m 的 2 倍）
         cx, cy = self.size_px // 2, self.size_px // 2
-        R, r = 0.6 * self.res, 0.2 * self.res
+        R, r = 1.2 * self.res, 0.4 * self.res
         pts = []
         for i in range(11):
             curr_r = R if i % 2 == 0 else r
