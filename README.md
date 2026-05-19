@@ -162,3 +162,21 @@ python evaluation.py
 
 [^3]: Wang, K.; Chen, K.; Guo, J.; Lu, J. "Saliency-LOAM: Saliency-Based LiDAR Odometry and Mapping." *IEEE TIM*, vol. 75, pp. 1–9, 2026.
 
+[^4]: Zhang, J.; Singh, S. "LOAM: Lidar Odometry and Mapping in Real-time." *Robotics: Science and Systems* (2014).
+
+[^5]: Besl, P.J.; McKay, N.D. "A Method for Registration of 3-D Shapes." *IEEE TPAMI*, vol. 14, no. 2, pp. 239–256, 1992.
+
+[^6]: Rusu, R.B.; Cousins, S. "3D is here: Point Cloud Library (PCL)." *2011 IEEE ICRA* (2011): 1–4.
+
+[^7]: Nguyen, V. et al. "A comparison of line extraction algorithms using 2D laser rangefinder for indoor mobile robotics." *2005 IEEE/RSJ IROS* (2005): 1929–1934.
+
+[^8]: Borges, G.A.; Aldon, M.J. "A split-and-merge segmentation algorithm for line extraction in 2D range images." *ICPR* (2000): 441–444.
+
+[^9]: Slamtec. "RPLIDAR A1 Development Kit User Manual." *Slamtec Co., Ltd.*, 2016.
+
+[^10]: Behley, J. et al. "SemanticKITTI: A Dataset for Semantic Scene Understanding of LiDAR Sequences." *2019 IEEE/CVF ICCV* (2019): 9297–9307.
+
+[^11]: Grisetti, G. et al. "A Tutorial on Graph-Based SLAM." *IEEE Intelligent Transportation Systems Magazine*, vol. 2, no. 4, pp. 31–43, 2010.
+
+[^12]: Shan, T.; Englot, B. "LeGO-LOAM: Lightweight and Ground-Optimized Lidar Odometry and Mapping on Variable Terrain." *2018 IEEE/RSJ IROS* (2018): 4758–4765.
+
